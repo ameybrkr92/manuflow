@@ -13,7 +13,9 @@
     "db:generate": "npm run db:generate --workspace=packages/database",
     "db:migrate": "npm run db:migrate --workspace=packages/database",
     "db:seed": "npm run db:seed --workspace=packages/database",
-    "db:studio": "npm run db:studio --workspace=packages/database"
+    "db:studio": "npm run db:studio --workspace=packages/database",
+    "start": "npm run start:prod --workspace=apps/api",
+    "build": "npm run build --workspace=apps/api"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
