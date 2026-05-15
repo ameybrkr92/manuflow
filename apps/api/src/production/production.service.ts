@@ -45,7 +45,7 @@ export class ProductionService {
   constructor(private prisma: PrismaService) {}
 
   // ── Work Centers ──
-  async findAllWorkCenters(companyId: string) {
+  async listWorkCenters(companyId: string) {
     return this.prisma.workCenter.findMany({
       where: { companyId, isActive: true },
       include: { _count: { select: { jobCards: true, workOrderOps: true } } },
@@ -59,8 +59,15 @@ export class ProductionService {
     });
   }
 
+  async updateWorkCenter(companyId: string, id: string, dto: Partial<CreateWorkCenterDto>) {
+    return this.prisma.workCenter.update({
+      where: { id, companyId },
+      data: dto,
+    });
+  }
+
   // ── Work Orders ──
-  async findAllWorkOrders(companyId: string, status?: string) {
+  async listWorkOrders(companyId: string, status?: string) {
     return this.prisma.workOrder.findMany({
       where: {
         companyId,

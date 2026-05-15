@@ -19,7 +19,7 @@ export class ProductionController {
   @Get('dashboard')
   @ApiOperation({ summary: 'Production dashboard stats' })
   getDashboard(@CurrentUser('companyId') cid: string) {
-    return this.service.getDashboard(cid);
+    return this.service.getProductionStats(cid);
   }
 
   // ── Work Centers ─────────────────────────────────────────────
@@ -55,10 +55,9 @@ export class ProductionController {
   @ApiOperation({ summary: 'List work orders' })
   listWorkOrders(
     @CurrentUser('companyId') cid: string,
-    @Query('status') status?: WorkOrderStatus,
-    @Query('salesOrderId') salesOrderId?: string,
+    @Query('status') status?: string,
   ) {
-    return this.service.listWorkOrders(cid, status, salesOrderId);
+    return this.service.listWorkOrders(cid, status);
   }
 
   @Get(':id')
@@ -67,16 +66,17 @@ export class ProductionController {
     @CurrentUser('companyId') cid: string,
     @Param('id') id: string,
   ) {
-    return this.service.getWorkOrder(cid, id);
+    return this.service.findOneWorkOrder(id, cid);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create work order' })
   createWorkOrder(
     @CurrentUser('companyId') cid: string,
+    @CurrentUser('id') uid: string,
     @Body() dto: CreateWorkOrderDto,
   ) {
-    return this.service.createWorkOrder(cid, dto);
+    return this.service.createWorkOrder(cid, dto, uid);
   }
 
   @Put(':id/status')
@@ -84,9 +84,9 @@ export class ProductionController {
   updateStatus(
     @CurrentUser('companyId') cid: string,
     @Param('id') id: string,
-    @Body('status') status: WorkOrderStatus,
+    @Body('status') status: string,
   ) {
-    return this.service.updateWorkOrderStatus(cid, id, status);
+    return this.service.updateWorkOrder(id, cid, { status: status as any });
   }
 
   @Put(':id/progress')
@@ -96,7 +96,7 @@ export class ProductionController {
     @Param('id') id: string,
     @Body('progress') progress: number,
   ) {
-    return this.service.updateWorkOrderProgress(cid, id, progress);
+    return this.service.updateWorkOrder(id, cid, { progress });
   }
 
   @Post(':id/operations')
@@ -106,6 +106,6 @@ export class ProductionController {
     @Param('id') workOrderId: string,
     @Body() dto: CreateOperationDto,
   ) {
-    return this.service.addOperation(cid, workOrderId, dto);
+    return this.service.addOperation(workOrderId, cid, dto);
   }
 }

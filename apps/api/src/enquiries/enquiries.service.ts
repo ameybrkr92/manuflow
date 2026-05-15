@@ -15,9 +15,14 @@ export class CreateEnquiryDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
 }
 
+import { AiService } from '../ai/ai.service';
+
 @Injectable()
 export class EnquiriesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private aiService: AiService
+  ) {}
 
   private async nextEnquiryNo(companyId: string): Promise<string> {
     const count = await this.prisma.enquiry.count({ where: { companyId } });

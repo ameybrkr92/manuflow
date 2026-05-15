@@ -15,7 +15,7 @@
     "db:seed": "npm run db:seed --workspace=packages/database",
     "db:studio": "npm run db:studio --workspace=packages/database",
     "start": "npm run start:prod --workspace=apps/api",
-    "build": "npm run build --workspace=apps/api"
+    "build": "npm run db:generate --workspace=packages/database && npm run build --workspace=apps/api"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
@@ -30,5 +30,8 @@
     "react-router-dom": "^7.15.0",
     "recharts": "^3.8.1",
     "tailwindcss": "^4.3.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
