@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.cache/
+coverage/
+prisma/migrations/
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker volumes
+postgres-data/
+redis-data/

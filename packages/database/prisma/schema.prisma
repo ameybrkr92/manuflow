@@ -1,0 +1,939 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  SALES_MANAGER
+  DESIGN_HEAD
+  PRODUCTION_PLANNER
+  SHOP_FLOOR_SUPERVISOR
+  QUALITY_INSPECTOR
+  PURCHASE_MANAGER
+  STORE_MANAGER
+  DISPATCH_MANAGER
+  FINANCE_MANAGER
+  CUSTOMER
+  VENDOR
+}
+
+enum EnquiryStatus {
+  NEW
+  UNDER_REVIEW
+  QUOTED
+  ORDER_RECEIVED
+  LOST
+  CANCELLED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  UNDER_NEGOTIATION
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum SalesOrderStatus {
+  CONFIRMED
+  DESIGN_APPROVED
+  IN_PRODUCTION
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+  ON_HOLD
+}
+
+enum MilestoneStatus {
+  PENDING
+  INVOICED
+  RECEIVED
+}
+
+enum WorkOrderStatus {
+  PLANNED
+  RELEASED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum JobCardStatus {
+  PENDING
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  REWORK
+}
+
+enum NCRStatus {
+  OPEN
+  ROOT_CAUSE_ANALYSIS
+  CORRECTIVE_ACTION
+  VERIFICATION
+  CLOSED
+}
+
+enum PRStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  PO_RAISED
+}
+
+enum POStatus {
+  DRAFT
+  SENT
+  ACKNOWLEDGED
+  PARTIAL_RECEIVED
+  FULLY_RECEIVED
+  CANCELLED
+}
+
+enum GRNStatus {
+  PENDING_QC
+  QC_PASSED
+  QC_FAILED
+  ACCEPTED
+  REJECTED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIAL_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum MakeOrBuy {
+  MAKE
+  BUY
+  SUB_CONTRACT
+}
+
+enum StockTransactionType {
+  GRN
+  JOB_ISSUE
+  JOB_RETURN
+  SCRAP
+  TRANSFER
+  ADJUSTMENT
+  VENDOR_RETURN
+  OPENING
+}
+
+// ─────────────────────────────────────────
+// TENANCY & AUTH
+// ─────────────────────────────────────────
+
+model Company {
+  id           String   @id @default(cuid())
+  name         String
+  gstin        String   @unique
+  pan          String?
+  address      Json
+  phone        String?
+  email        String?
+  logoUrl      String?
+  financialYearStart Int @default(4) // April
+  currency     String   @default("INR")
+  plan         String   @default("starter")
+  isActive     Boolean  @default(true)
+  settings     Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users            User[]
+  customers        Customer[]
+  vendors          Vendor[]
+  enquiries        Enquiry[]
+  quotations       Quotation[]
+  salesOrders      SalesOrder[]
+  workCenters      WorkCenter[]
+  workOrders       WorkOrder[]
+  purchaseOrders   PurchaseOrder[]
+  materialMasters  MaterialMaster[]
+  invoices         Invoice[]
+  supportTickets   SupportTicket[]
+  auditLogs        AuditLog[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  companyId    String
+  email        String
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         UserRole
+  phone        String?
+  isActive     Boolean  @default(true)
+  twoFASecret  String?
+  twoFAEnabled Boolean  @default(false)
+  lastLoginAt  DateTime?
+  customerId   String?
+  vendorId     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company  @relation(fields: [companyId], references: [id])
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  vendor       Vendor?   @relation(fields: [vendorId], references: [id])
+  auditLogs    AuditLog[]
+
+  @@unique([companyId, email])
+  @@map("users")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  companyId  String
+  userId     String
+  tableName  String
+  recordId   String
+  action     String   // CREATE, UPDATE, DELETE
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  company    Company  @relation(fields: [companyId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([companyId, tableName, recordId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────
+// MODULE 1 — CUSTOMER & ORDER MANAGEMENT
+// ─────────────────────────────────────────
+
+model Customer {
+  id             String   @id @default(cuid())
+  companyId      String
+  code           String
+  name           String
+  gstin          String?
+  pan            String?
+  billingAddress Json
+  shippingAddress Json?
+  contactPersons Json     @default("[]")
+  creditLimit    Decimal  @default(0) @db.Decimal(15,2)
+  paymentTerms   String   @default("30 days")
+  isActive       Boolean  @default(true)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company        Company    @relation(fields: [companyId], references: [id])
+  enquiries      Enquiry[]
+  salesOrders    SalesOrder[]
+  invoices       Invoice[]
+  supportTickets SupportTicket[]
+  users          User[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("customers")
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  companyId   String
+  customerId  String
+  subject     String
+  description String
+  status      String   @default("OPEN")
+  priority    String   @default("MEDIUM")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id])
+  customer    Customer @relation(fields: [customerId], references: [id])
+
+  @@index([companyId, status])
+  @@map("support_tickets")
+}
+
+model Enquiry {
+  id              String        @id @default(cuid())
+  companyId       String
+  enquiryNo       String
+  customerId      String
+  subject         String
+  description     String?
+  specifications  Json?
+  attachments     Json          @default("[]") // S3 keys
+  deliveryRequired DateTime?
+  status          EnquiryStatus @default(NEW)
+  assignedTo      String?
+  notes           String?
+  aiSummary       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  company         Company     @relation(fields: [companyId], references: [id])
+  customer        Customer    @relation(fields: [customerId], references: [id])
+  quotations      Quotation[]
+
+  @@unique([companyId, enquiryNo])
+  @@index([companyId, status])
+  @@map("enquiries")
+}
+
+model Quotation {
+  id              String          @id @default(cuid())
+  companyId       String
+  quotationNo     String
+  version         Int             @default(1)
+  enquiryId       String?
+  customerId      String
+  lineItems       Json            @default("[]")
+  subtotal        Decimal         @db.Decimal(15,2)
+  taxAmount       Decimal         @db.Decimal(15,2)
+  totalAmount     Decimal         @db.Decimal(15,2)
+  taxBreakup      Json?
+  validUntil      DateTime?
+  deliveryWeeks   Int?
+  paymentTerms    String?
+  notes           String?
+  termsConditions String?
+  status          QuotationStatus @default(DRAFT)
+  isAiGenerated   Boolean         @default(false)
+  aiPrompt        String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  company         Company      @relation(fields: [companyId], references: [id])
+  enquiry         Enquiry?     @relation(fields: [enquiryId], references: [id])
+  salesOrders     SalesOrder[]
+
+  @@unique([companyId, quotationNo, version])
+  @@index([companyId, status])
+  @@map("quotations")
+}
+
+model SalesOrder {
+  id                String           @id @default(cuid())
+  companyId         String
+  orderNo           String
+  customerId        String
+  quotationId       String?
+  subject           String
+  lineItems         Json             @default("[]")
+  subtotal          Decimal          @db.Decimal(15,2)
+  taxAmount         Decimal          @db.Decimal(15,2)
+  totalAmount       Decimal          @db.Decimal(15,2)
+  deliveryDate      DateTime?
+  status            SalesOrderStatus @default(CONFIRMED)
+  designApprovedAt  DateTime?
+  designApprovedBy  String?
+  paymentSchedule   Json             @default("[]")
+  shippingAddress   Json?
+  notes             String?
+  internalNotes     String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  company           Company            @relation(fields: [companyId], references: [id])
+  customer          Customer           @relation(fields: [customerId], references: [id])
+  quotation         Quotation?         @relation(fields: [quotationId], references: [id])
+  paymentMilestones PaymentMilestone[]
+  workOrders        WorkOrder[]
+  invoices          Invoice[]
+  boms              BOM[]
+  dispatchAdvices   DispatchAdvice[]
+
+  @@unique([companyId, orderNo])
+  @@index([companyId, status])
+  @@map("sales_orders")
+}
+
+model PaymentMilestone {
+  id           String          @id @default(cuid())
+  companyId    String
+  salesOrderId String
+  name         String
+  percentage   Decimal         @db.Decimal(5,2)
+  amount       Decimal         @db.Decimal(15,2)
+  triggerEvent String
+  dueDate      DateTime?
+  status       MilestoneStatus @default(PENDING)
+  invoiceId    String?
+  receivedDate DateTime?
+  notes        String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id])
+
+  @@index([salesOrderId])
+  @@map("payment_milestones")
+}
+
+// ─────────────────────────────────────────
+// MODULE 2 — DESIGN & ENGINEERING
+// ─────────────────────────────────────────
+
+model BOM {
+  id           String   @id @default(cuid())
+  companyId    String
+  bomNo        String
+  version      Int      @default(1)
+  salesOrderId String?
+  productName  String
+  description  String?
+  status       String   @default("DRAFT")
+  isAiGenerated Boolean @default(false)
+  approvedBy   String?
+  approvedAt   DateTime?
+  totalCost    Decimal? @db.Decimal(15,2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
+  items        BOMItem[]
+
+  @@unique([companyId, bomNo, version])
+  @@index([companyId])
+  @@map("boms")
+}
+
+model BOMItem {
+  id           String    @id @default(cuid())
+  bomId        String
+  parentId     String?
+  level        Int       @default(1)
+  partNo       String
+  description  String
+  qty          Decimal   @db.Decimal(10,3)
+  uom          String
+  makeOrBuy    MakeOrBuy @default(BUY)
+  unitCost     Decimal?  @db.Decimal(15,2)
+  totalCost    Decimal?  @db.Decimal(15,2)
+  materialId   String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  bom          BOM       @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  parent       BOMItem?  @relation("BOMItemTree", fields: [parentId], references: [id])
+  children     BOMItem[] @relation("BOMItemTree")
+  drawings     Drawing[]
+
+  @@index([bomId])
+  @@map("bom_items")
+}
+
+model Drawing {
+  id          String   @id @default(cuid())
+  companyId   String
+  bomItemId   String?
+  drawingNo   String
+  revision    String   @default("A")
+  title       String
+  s3Key       String
+  fileType    String
+  version     Int      @default(1)
+  uploadedBy  String
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  bomItem     BOMItem? @relation(fields: [bomItemId], references: [id])
+
+  @@index([companyId, drawingNo])
+  @@map("drawings")
+}
+
+model ECN {
+  id              String   @id @default(cuid())
+  companyId       String
+  ecnNo           String
+  bomId           String
+  title           String
+  description     String
+  reason          String
+  impactedOrders  Json     @default("[]")
+  status          String   @default("DRAFT")
+  raisedBy        String
+  approvedBy      String?
+  approvedAt      DateTime?
+  implementedAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, ecnNo])
+  @@map("ecns")
+}
+
+// ─────────────────────────────────────────
+// MODULE 3 — PRODUCTION PLANNING
+// ─────────────────────────────────────────
+
+model WorkCenter {
+  id             String   @id @default(cuid())
+  companyId      String
+  code           String
+  name           String
+  description    String?
+  capacityHrsDay Decimal  @default(8) @db.Decimal(5,2)
+  shifts         Int      @default(1)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company        Company              @relation(fields: [companyId], references: [id])
+  workOrderOps   WorkOrderOperation[]
+  jobCards       JobCard[]
+
+  @@unique([companyId, code])
+  @@map("work_centers")
+}
+
+model WorkOrder {
+  id              String          @id @default(cuid())
+  companyId       String
+  workOrderNo     String
+  salesOrderId    String
+  bomId           String?
+  productName     String
+  qty             Decimal         @db.Decimal(10,3)
+  plannedStart    DateTime?
+  plannedEnd      DateTime?
+  actualStart     DateTime?
+  actualEnd       DateTime?
+  status          WorkOrderStatus @default(PLANNED)
+  priority        Int             @default(5)
+  progress        Int             @default(0)
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  company         Company              @relation(fields: [companyId], references: [id])
+  salesOrder      SalesOrder           @relation(fields: [salesOrderId], references: [id])
+  operations      WorkOrderOperation[]
+  jobCards        JobCard[]
+  materialIssues  MaterialIssue[]
+  inspections     InspectionRecord[]
+  ncrs            NCR[]
+
+  @@unique([companyId, workOrderNo])
+  @@index([companyId, status])
+  @@map("work_orders")
+}
+
+model WorkOrderOperation {
+  id             String   @id @default(cuid())
+  workOrderId    String
+  workCenterId   String
+  operationName  String
+  sequence       Int
+  plannedHours   Decimal  @db.Decimal(8,2)
+  actualHours    Decimal  @default(0) @db.Decimal(8,2)
+  plannedStart   DateTime?
+  plannedEnd     DateTime?
+  status         String   @default("PENDING")
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workOrder      WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  workCenter     WorkCenter @relation(fields: [workCenterId], references: [id])
+  jobCards       JobCard[]
+
+  @@index([workOrderId])
+  @@map("work_order_operations")
+}
+
+// ─────────────────────────────────────────
+// MODULE 4 — SHOP FLOOR EXECUTION
+// ─────────────────────────────────────────
+
+model JobCard {
+  id            String        @id @default(cuid())
+  companyId     String
+  jobCardNo     String
+  workOrderId   String
+  operationId   String
+  workCenterId  String
+  assignedTo    String?
+  plannedHours  Decimal       @db.Decimal(8,2)
+  actualHours   Decimal       @default(0) @db.Decimal(8,2)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  status        JobCardStatus @default(PENDING)
+  instructions  String?
+  drawingRef    String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  workOrder     WorkOrder          @relation(fields: [workOrderId], references: [id])
+  operation     WorkOrderOperation @relation(fields: [operationId], references: [id])
+  workCenter    WorkCenter         @relation(fields: [workCenterId], references: [id])
+  downtimeLogs  DowntimeLog[]
+  materialIssues MaterialIssue[]
+
+  @@unique([companyId, jobCardNo])
+  @@index([companyId, status])
+  @@map("job_cards")
+}
+
+model DowntimeLog {
+  id          String   @id @default(cuid())
+  companyId   String
+  jobCardId   String
+  reasonCode  String
+  description String?
+  startTime   DateTime
+  endTime     DateTime?
+  durationMin Int?
+  loggedBy    String
+  createdAt   DateTime @default(now())
+
+  jobCard     JobCard  @relation(fields: [jobCardId], references: [id])
+
+  @@index([companyId, jobCardId])
+  @@map("downtime_logs")
+}
+
+model MaterialIssue {
+  id           String   @id @default(cuid())
+  companyId    String
+  jobCardId    String?
+  workOrderId  String
+  materialId   String
+  qty          Decimal  @db.Decimal(10,3)
+  uom          String
+  issuedBy     String
+  issuedAt     DateTime @default(now())
+  notes        String?
+
+  jobCard      JobCard?       @relation(fields: [jobCardId], references: [id])
+  workOrder    WorkOrder      @relation(fields: [workOrderId], references: [id])
+  material     MaterialMaster @relation(fields: [materialId], references: [id])
+
+  @@index([workOrderId])
+  @@map("material_issues")
+}
+
+// ─────────────────────────────────────────
+// MODULE 5 — QUALITY MANAGEMENT
+// ─────────────────────────────────────────
+
+model InspectionPlan {
+  id          String   @id @default(cuid())
+  companyId   String
+  partNo      String
+  partName    String
+  parameters  Json     @default("[]")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([companyId, partNo])
+  @@map("inspection_plans")
+}
+
+model InspectionRecord {
+  id             String   @id @default(cuid())
+  companyId      String
+  workOrderId    String?
+  grnId          String?
+  inspectionType String   // IN_PROCESS, INCOMING, FINAL, FAT
+  partNo         String
+  partName       String
+  results        Json     @default("[]")
+  overallResult  String   // PASS, FAIL, CONDITIONAL
+  inspectedBy    String
+  inspectedAt    DateTime @default(now())
+  notes          String?
+  attachments    Json     @default("[]")
+
+  workOrder      WorkOrder? @relation(fields: [workOrderId], references: [id])
+  ncrs           NCR[]
+
+  @@index([companyId])
+  @@map("inspection_records")
+}
+
+model NCR {
+  id              String    @id @default(cuid())
+  companyId       String
+  ncrNo           String
+  workOrderId     String?
+  inspectionId    String?
+  title           String
+  description     String
+  partNo          String?
+  defectType      String
+  qty             Decimal?  @db.Decimal(10,3)
+  rootCause       String?
+  whyAnalysis     Json?
+  correctiveAction String?
+  assignedTo      String?
+  dueDate         DateTime?
+  status          NCRStatus @default(OPEN)
+  closedBy        String?
+  closedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workOrder       WorkOrder?       @relation(fields: [workOrderId], references: [id])
+  inspection      InspectionRecord? @relation(fields: [inspectionId], references: [id])
+
+  @@unique([companyId, ncrNo])
+  @@index([companyId, status])
+  @@map("ncrs")
+}
+
+// ─────────────────────────────────────────
+// MODULE 6 — PURCHASE & VENDOR MANAGEMENT
+// ─────────────────────────────────────────
+
+model Vendor {
+  id              String   @id @default(cuid())
+  companyId       String
+  code            String
+  name            String
+  gstin           String?
+  pan             String?
+  address         Json
+  contactPersons  Json     @default("[]")
+  bankDetails     Json?
+  paymentTerms    String   @default("30 days")
+  categories      Json     @default("[]")
+  rating          Decimal  @default(0) @db.Decimal(3,2)
+  isMSME          Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company         Company         @relation(fields: [companyId], references: [id])
+  purchaseOrders  PurchaseOrder[]
+  grns            GRN[]
+  users           User[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("vendors")
+}
+
+model PurchaseRequisition {
+  id           String   @id @default(cuid())
+  companyId    String
+  prNo         String
+  workOrderId  String?
+  materialId   String?
+  description  String
+  qty          Decimal  @db.Decimal(10,3)
+  uom          String
+  requiredBy   DateTime?
+  status       PRStatus @default(DRAFT)
+  raisedBy     String
+  approvedBy   String?
+  approvedAt   DateTime?
+  notes        String?
+  isAutoMRP    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([companyId, prNo])
+  @@index([companyId, status])
+  @@map("purchase_requisitions")
+}
+
+model PurchaseOrder {
+  id            String   @id @default(cuid())
+  companyId     String
+  poNo          String
+  version       Int      @default(1)
+  vendorId      String
+  lineItems     Json     @default("[]")
+  subtotal      Decimal  @db.Decimal(15,2)
+  taxAmount     Decimal  @db.Decimal(15,2)
+  totalAmount   Decimal  @db.Decimal(15,2)
+  deliveryDate  DateTime?
+  deliveryAddr  Json?
+  status        POStatus @default(DRAFT)
+  vendorInvoiceNo String?
+  vendorInvoiceUrl String?
+  paymentTerms  String?
+  notes         String?
+  termsConditions String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company       Company  @relation(fields: [companyId], references: [id])
+  vendor        Vendor   @relation(fields: [vendorId], references: [id])
+  grns          GRN[]
+
+  @@unique([companyId, poNo, version])
+  @@index([companyId, status])
+  @@map("purchase_orders")
+}
+
+model GRN {
+  id            String    @id @default(cuid())
+  companyId     String
+  grnNo         String
+  purchaseOrderId String
+  vendorId      String
+  lineItems     Json      @default("[]")
+  receivedBy    String
+  receivedAt    DateTime  @default(now())
+  status        GRNStatus @default(PENDING_QC)
+  notes         String?
+  attachments   Json      @default("[]")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  vendor        Vendor        @relation(fields: [vendorId], references: [id])
+
+  @@unique([companyId, grnNo])
+  @@index([companyId])
+  @@map("grns")
+}
+
+// ─────────────────────────────────────────
+// MODULE 7 — STORE & INVENTORY MANAGEMENT
+// ─────────────────────────────────────────
+
+model MaterialMaster {
+  id              String   @id @default(cuid())
+  companyId       String
+  partNo          String
+  description     String
+  uom             String
+  hsnCode         String?
+  category        String?
+  reorderLevel    Decimal  @default(0) @db.Decimal(10,3)
+  minStock        Decimal  @default(0) @db.Decimal(10,3)
+  maxStock        Decimal  @default(0) @db.Decimal(10,3)
+  currentStock    Decimal  @default(0) @db.Decimal(10,3)
+  valuationRate   Decimal  @default(0) @db.Decimal(15,4)
+  storageLocation String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company         Company         @relation(fields: [companyId], references: [id])
+  stockLedger     StockLedger[]
+  materialIssues  MaterialIssue[]
+
+  @@unique([companyId, partNo])
+  @@index([companyId])
+  @@map("material_masters")
+}
+
+model StockLedger {
+  id            String               @id @default(cuid())
+  companyId     String
+  materialId    String
+  transactionType StockTransactionType
+  qty           Decimal              @db.Decimal(10,3)
+  rate          Decimal              @db.Decimal(15,4)
+  value         Decimal              @db.Decimal(15,2)
+  balanceQty    Decimal              @db.Decimal(10,3)
+  documentRef   String
+  documentType  String
+  notes         String?
+  transactedBy  String
+  transactedAt  DateTime             @default(now())
+
+  material      MaterialMaster @relation(fields: [materialId], references: [id])
+
+  @@index([companyId, materialId])
+  @@map("stock_ledger")
+}
+
+// ─────────────────────────────────────────
+// MODULE 8 — DISPATCH & LOGISTICS
+// ─────────────────────────────────────────
+
+model DispatchAdvice {
+  id            String   @id @default(cuid())
+  companyId     String
+  daNo          String
+  salesOrderId  String
+  lineItems     Json     @default("[]")
+  packingList   Json?
+  transporterName String?
+  vehicleNo     String?
+  lrNo          String?
+  ewaybillNo    String?
+  challanNo     String?
+  dispatchDate  DateTime?
+  deliveryDate  DateTime?
+  status        String   @default("PLANNED")
+  financeCleared Boolean @default(false)
+  fatCleared    Boolean  @default(false)
+  notes         String?
+  attachments   Json     @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  salesOrder    SalesOrder @relation(fields: [salesOrderId], references: [id])
+
+  @@unique([companyId, daNo])
+  @@map("dispatch_advices")
+}
+
+// ─────────────────────────────────────────
+// MODULE 9 — FINANCE & BILLING
+// ─────────────────────────────────────────
+
+model Invoice {
+  id             String        @id @default(cuid())
+  companyId      String
+  invoiceNo      String
+  customerId     String
+  salesOrderId   String?
+  milestoneId    String?
+  invoiceDate    DateTime      @default(now())
+  dueDate        DateTime?
+  lineItems      Json          @default("[]")
+  subtotal       Decimal       @db.Decimal(15,2)
+  cgst           Decimal       @default(0) @db.Decimal(15,2)
+  sgst           Decimal       @default(0) @db.Decimal(15,2)
+  igst           Decimal       @default(0) @db.Decimal(15,2)
+  totalAmount    Decimal       @db.Decimal(15,2)
+  paidAmount     Decimal       @default(0) @db.Decimal(15,2)
+  status         InvoiceStatus @default(DRAFT)
+  irn            String?
+  qrCode         String?
+  isEInvoice     Boolean       @default(false)
+  s3Key          String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  company        Company    @relation(fields: [companyId], references: [id])
+  customer       Customer   @relation(fields: [customerId], references: [id])
+  salesOrder     SalesOrder? @relation(fields: [salesOrderId], references: [id])
+
+  @@unique([companyId, invoiceNo])
+  @@index([companyId, status])
+  @@map("invoices")
+}
