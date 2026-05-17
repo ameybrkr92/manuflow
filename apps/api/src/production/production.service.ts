@@ -128,11 +128,13 @@ export class ProductionService {
       where: { id },
       data: {
         ...dto,
+        status: dto.status as any,
         actualStart: dto.actualStart ? new Date(dto.actualStart) : undefined,
         actualEnd: dto.actualEnd ? new Date(dto.actualEnd) : undefined,
       },
     });
   }
+
 
   async releaseWorkOrder(id: string, companyId: string) {
     await this.findOneWorkOrder(id, companyId);

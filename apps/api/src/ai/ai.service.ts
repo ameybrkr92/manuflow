@@ -127,6 +127,22 @@ Provide a concise risk analysis with:
     });
 
     const content = response.content[0];
+    return content.type === 'text' ? content.text : 'Analysis unavailable.';
+  }
+
+  async generateJson(prompt: string): Promise<string> {
+    const response = await this.client.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const content = response.content[0];
+    if (content.type !== 'text') return '[]';
+    const jsonMatch = content.text.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+    return jsonMatch ? jsonMatch[0] : content.text;
+  }
+
   async summarizeEnquiry(context: { enquiry: any }): Promise<string> {
     const prompt = `Summarize the following customer enquiry for a manufacturing company. 
 Highlight the key technical requirements, delivery constraints, and any critical details.
@@ -149,3 +165,4 @@ Return a 2-3 sentence executive summary.`;
     return content.type === 'text' ? content.text : 'Summary unavailable.';
   }
 }
+

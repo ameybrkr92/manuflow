@@ -15,7 +15,9 @@
     "db:seed": "npm run db:seed --workspace=packages/database",
     "db:studio": "npm run db:studio --workspace=packages/database",
     "start": "npm run start:prod --workspace=apps/api",
+    "start:prod": "npm run start:prod --workspace=apps/api",
     "build": "npm run db:generate --workspace=packages/database && npm run build --workspace=apps/api"
+
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

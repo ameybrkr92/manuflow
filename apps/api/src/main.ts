@@ -15,7 +15,7 @@ async function bootstrap() {
     ].filter(Boolean), 
     credentials: true 
   });
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', { exclude: ['health'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const config = new DocumentBuilder()

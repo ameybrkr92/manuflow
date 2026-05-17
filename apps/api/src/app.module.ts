@@ -19,6 +19,8 @@ import { DispatchModule } from './dispatch/dispatch.module';
 import { FinanceModule } from './finance/finance.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SupportTicketsModule } from './support-tickets/support-tickets.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -43,5 +45,7 @@ import { SupportTicketsModule } from './support-tickets/support-tickets.module';
     AnalyticsModule,
     SupportTicketsModule,
   ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}
